@@ -3,7 +3,8 @@ import {Modal} from "./Modal";
 
 const App: React.FC = () => {
   const [state, setState] = useState(true);
-  const onClick = useCallback(() => setState(state => !state), []);
+  const open = useCallback(() => setState(true), []);
+  const close = useCallback(() => setState(false), []);
 
   const modalWindow: React.CSSProperties = {
     width: "400px",
@@ -17,11 +18,11 @@ const App: React.FC = () => {
       <Modal.Outlet/>
       <Modal isOpen={state}>
         <div style={modalWindow}>
-          <button onClick={onClick}>✖</button>
+          <button onClick={close}>✖</button>
         </div>
       </Modal>
 
-      <button onClick={onClick}>open modal</button>
+      <button onClick={open}>open modal</button>
     </main>
   );
 };

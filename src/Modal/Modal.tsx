@@ -1,6 +1,6 @@
 import {BehaviorSubject, combineLatest} from "rxjs";
 import {v4} from "uuid";
-import {ModalContext} from "./modalContext";
+import {InternalModalContext} from "./Context";
 import React, {
   ReactElement,
   ReactNode,
@@ -8,31 +8,46 @@ import React, {
   useEffect,
   useState
 } from "react";
+import {filter} from "rxjs/operators";
 
-const Modal: ModalComposition & React.FC<ModalPropsType> = ({isOpen, children, outlet = 'root'}) => {
-  const contekst = useContext(ModalContext);
+
+const Modal: ModalComposition & React.FC<ModalPropsType> = ({isOpen, children, outlet = 'root', uuid = v4()}) => {
+  const context = useContext(InternalModalContext);
   /** Generating static identifier */
-  const [uuid] = useState(v4());
+  const [id] = useState(uuid);
   const [subject] = useState(new BehaviorSubject(isOpen));
+  const [visible, setVisible] = useState(isOpen);
 
   /** Sending Modal component */
   useEffect(() => {
-    contekst.addModal({uuid, children, isOpen: subject, outlet});
+    context.addModal({uuid: id, children, isOpen: subject, outlet});
 
     return () => {
-      contekst.removeModal(uuid);
+      context.removeModal(uuid);
       subject.unsubscribe();
     };
   }, []);
 
+  /** Tutaj */
+  useEffect(() => {
+    const subscription = context.VisibilitySubject
+      .pipe(
+        filter(visibilityEvent => visibilityEvent.uuid === uuid),
+      ).subscribe(visibilityEvent => setVisible(visibilityEvent.isVisible));
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => subject.next(visible), [visible]);
+  useEffect(() => setVisible(isOpen), [isOpen]);
+  console.log(123);
   /** Controlling component */
-  useEffect(() => subject.next(isOpen), [isOpen]);
 
   return null;
 };
 
 const Outlet : React.FC<OutletPropsType> = ({name = 'root', config = {}}) => {
-  const contekst = useContext(ModalContext);
+  const context = useContext(InternalModalContext);
   /** Render content */
   const [state, setState] = useState();
   /** Controlling renders */
@@ -40,14 +55,16 @@ const Outlet : React.FC<OutletPropsType> = ({name = 'root', config = {}}) => {
   /** Backdrop */
   const [visible, setVisible] = useState(false);
 
-  contekst.addOutlet({name, setState});
+  context.addOutlet({name, setState});
 
   /** Rendering Actual Modal component from stored data */
   useEffect(() => {
     if (state) {
       setRender(state.map(([uuid, isOpen, modalContent]: any) => <Window key={uuid} isOpen={isOpen} modalContent={modalContent}/>));
       const outletObservables = state.reduce((cV:any, [, isOpen]:any) => [...cV, isOpen], []);
-      combineLatest(outletObservables).subscribe(val => setVisible(val.some(el => el)));
+      const subsciption = combineLatest(outletObservables).subscribe(val => setVisible(val.some(el => el)));
+
+      return () => subsciption.unsubscribe();
     }
   }, [state]);
 
@@ -55,7 +72,7 @@ const Outlet : React.FC<OutletPropsType> = ({name = 'root', config = {}}) => {
   const stylez: React.CSSProperties = {...{
       position: "absolute",
       width: "100%",
-      height: "100%",
+      minHeight: "100%",
       top: 0,
       left: 0,
       backgroundColor: "rgba(0, 0, 0, 0.6)",
@@ -104,6 +121,7 @@ interface ModalPropsType {
   isOpen: boolean;
   children: ReactNode;
   outlet?: string;
+  uuid?: string;
 }
 
 /** @TODO There is no autocompleate in JSX, fix this or change pattern... */

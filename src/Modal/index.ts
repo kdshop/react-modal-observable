@@ -1,7 +1,7 @@
-import {Modal} from "./Modal";
-import {ModalContext} from "./modalContext";
+import { Modal } from "./Modal";
+import { ModalContext } from "./Context";
 
 export {
   Modal,
-  ModalContext,
+  ModalContext
 };
