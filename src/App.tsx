@@ -1,10 +1,10 @@
-import React, {useCallback, useState} from 'react';
-import {Modal} from "./Modal";
+import React, {useCallback, useContext, useState} from 'react';
+import {Modal, ModalContext, ModalOutlet} from "./Modal";
 
 const App: React.FC = () => {
-  const [state, setState] = useState(true);
-  const open = useCallback(() => setState(true), []);
-  const close = useCallback(() => setState(false), []);
+  const modalContext = useContext(ModalContext);
+  const [visibility$] = useState(modalContext.visibilitySubject$);
+  const callback = useCallback((uuid, isVisible) => visibility$.next({uuid, isVisible, outlet:'root'}), [])
 
   const modalWindow: React.CSSProperties = {
     width: "400px",
@@ -15,14 +15,15 @@ const App: React.FC = () => {
 
   return (
     <main>
-      <Modal.Outlet/>
-      <Modal isOpen={state}>
+      <ModalOutlet/>
+
+      <Modal uuid={'modal1'}>
         <div style={modalWindow}>
-          <button onClick={close}>✖</button>
+          <button onClick={() => callback('modal1', false)}>✖</button>
         </div>
       </Modal>
 
-      <button onClick={open}>open modal</button>
+      <button onClick={() => callback('modal1', true)}>open modal</button>
     </main>
   );
 };

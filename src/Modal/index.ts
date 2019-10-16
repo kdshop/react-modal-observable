@@ -1,7 +1,8 @@
-import { Modal } from "./Modal";
+import { Modal, Outlet } from "./Modal";
 import { ModalContext } from "./Context";
 
 export {
   Modal,
-  ModalContext
+  Outlet as ModalOutlet,
+  ModalContext,
 };

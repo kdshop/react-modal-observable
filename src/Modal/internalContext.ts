@@ -1,4 +1,4 @@
-import {BehaviorSubject, ReplaySubject, Subject, Subscription} from "rxjs";
+import {ReplaySubject} from "rxjs";
 import {
   Dispatch,
   ReactNode,
@@ -8,26 +8,29 @@ import {VisibilityEvent} from "./publicContext";
 
 
 export class InternalContext {
-  private ModalSubject = new BehaviorSubject<ModalDBType>({});
-  private modalDB: ModalDBType = {};
-  private outletDB: OutletDBType = {};
-  private visibilityDB : VisibilityDBType = {};
-  private outletContentDB: OutletContentDBType = {};
+  private dataBase: DataBaseType = {};
   private isRunning = false;
-  public VisibilitySubject = new ReplaySubject<VisibilityEvent>();
+  public identyfiyModal$ = new ReplaySubject<{uuid: string, outlet: string}>();
+  public visibility$ = new ReplaySubject<VisibilityEvent>();
 
   addOutlet(outlet: OutletType) {
     const {name, setState} = outlet;
-    this.outletDB = {...this.outletDB, [name]: setState};
+    this.dataBase = {...this.dataBase, [name]: {...this.dataBase[name], setState}};
   }
 
   addModal(modalData: ModalType) {
-    const { uuid, outlet, isOpen } = modalData;
+    const {outlet, uuid, children} = modalData;
+    this.identyfiyModal$.next({uuid, outlet});
+    this.dataBase[outlet] = {
+      ...this.dataBase[outlet],
+      content: {
+        ...this.dataBase[outlet].content,
+        [uuid]: children,
+      },
+    };
 
-    this.addVisibilityData(uuid, outlet, isOpen);
-    this.addModalData(modalData);
+    this.renderOutlet();
 
-    /** Subscribing into main Subject  */
     if (!this.isRunning) {
       this.run();
       this.isRunning = true;
@@ -35,98 +38,50 @@ export class InternalContext {
   }
 
   removeModal(uuid: string) {
-    /** Deleting records from internal database  */
-    this.removeModalData(uuid);
-    this.removeVisibilityData(uuid);
-    this.removeOutletData(uuid);
+    this.dataBase =
+      Object.fromEntries(
+        Object.entries(this.dataBase).map(([name, {content, setState}]) =>
+          [
+            name,
+            {
+              setState,
+              content: Object.fromEntries(
+                Object.entries(content)
+                  .filter(([id, ]) => id !== uuid)
+              )
+            }
+          ]
+        )
+      )
   }
 
-  closeLastModal() {
-    const openModals = Object.entries(this.visibilityDB).filter(([, value]) => value.isOpenValue && value.outlet in this.outletDB);
-    const lastModal = openModals[openModals.length - 1];
-
-    lastModal && this.modalVisible(lastModal[0], false);
-  }
-
-  modalVisible = (uuid: string, isVisible: boolean) => {
-    if (this.visibilityDB[uuid]) {
-      this.VisibilitySubject.next({uuid, isVisible});
-    }
-  };
-
-  private addVisibilityData(uuid: string, outlet: string, isOpen: BehaviorSubject<boolean>) {
-    this.visibilityDB = {
-      ...this.visibilityDB,
-      [uuid]: {
-        outlet,
-        isOpenStream: isOpen,
-      },
-    };
-
-    this.visibilityDB = {
-      ...this.visibilityDB,
-      [uuid]: {
-        ...this.visibilityDB[uuid],
-        isOpenSubscription: isOpen.subscribe(value => {
-          this.visibilityDB[uuid].isOpenValue = value;
-        }),
-      },
-    }
-  }
-
-  private removeOutletData = (uuid: string) => this.outletContentDB = Object.fromEntries(Object.entries(this.outletContentDB)
-    .map(([key, value]) => [key, Object.fromEntries(Object.entries(value).filter(([key]) => key !== uuid))]));
-
-  private removeModalData = (uuid: string) => this.modalDB = Object.fromEntries(Object.entries(this.modalDB).filter(([key]) => key !== uuid));
-
-  private removeVisibilityData(uuid: string) {
-      this.visibilityDB[uuid].isOpenSubscription!.unsubscribe();
-      const {[uuid]: omit, ...rest} = this.visibilityDB;
-      this.visibilityDB = rest;
-  }
-
-  private addModalData({uuid, ...modal}: ModalType) {
-    this.modalDB = {...this.modalDB, [uuid]: modal};
-    /** Sending components into internal stream */
-    this.ModalSubject.next(this.modalDB);
+  getModalOutlet(uuid: string) {
+    // ?
   }
 
   private run() {
+    /** @TODO im not sure about this ¯\_(ツ)_/¯ */
     document.addEventListener('keyup', ev => {
       if (ev.code === 'Escape') {
-        this.closeLastModal();
+        console.log('eskejp działa, lecimy dalej z tematem')
+        // this.closeLastModal();
       }
     });
-    /** Main storing engine */
-    this.ModalSubject.subscribe(value => {
-      /** Aggregating steam data accordingly to its types and unique identifiers. */
-
-      /** Outlets */
-      Object.entries(value)
-        .forEach(([uuid, {outlet, children, isOpen}]) => {
-          if (this.outletContentDB.hasOwnProperty(outlet)) {
-            this.outletContentDB[outlet] = {...this.outletContentDB[outlet], [uuid]: {isOpen, children}}
-          } else {
-            this.outletContentDB[outlet] = {[uuid]: {isOpen, children}};
-          }
-        });
-
-      /** Modals */
-      Object.entries(this.outletContentDB)
-        .forEach(([name, modalContent]) =>
-          this.outletDB[name] && this.outletDB[name](
-            Object.entries(modalContent)
-              .map(([key, {isOpen, children}]) => [key, isOpen, children])
-          )
-        );
-    });
   }
+
+  private renderOutlet() {
+    Object.values(this.dataBase).forEach(outlet =>
+      outlet.setState(
+        outlet.content && Object.entries(outlet.content),
+      )
+    )
+  }
+
 }
 
 export interface ModalType {
   uuid: string
   children: ReactNode;
-  isOpen: BehaviorSubject<boolean>;
   outlet: string;
 }
 
@@ -135,23 +90,11 @@ export interface OutletType {
   setState: Dispatch<SetStateAction<ReactNode>>
 }
 
-interface VisibilityDBType {
-  [uuid: string]: {
-    outlet: string;
-    isOpenStream: BehaviorSubject<boolean>;
-    isOpenSubscription?: Subscription;
-    isOpenValue?: boolean;
-  },
-}
-
-interface ModalDBType {
-  [uuid: string]: Omit<ModalType, 'uuid'>;
-}
-
-interface OutletDBType {
-  [key: string]: Dispatch<SetStateAction<ReactNode>>
-}
-
-interface OutletContentDBType {
-  [name: string]: {[uuid: string]: {isOpen: BehaviorSubject<boolean>; children: ReactNode}};
+interface DataBaseType {
+  [name: string]: {
+    setState: Dispatch<SetStateAction<ReactNode>>
+    content: {
+      [uuid: string]: ReactNode;
+    }
+  };
 }
