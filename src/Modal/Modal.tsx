@@ -7,7 +7,7 @@ import React, {
   useEffect, useRef,
   useState
 } from "react";
-import {distinctUntilChanged, filter, map, scan} from "rxjs/operators";
+import {distinctUntilChanged, filter, map, scan, tap} from "rxjs/operators";
 
 
 const Modal: React.FC<ModalPropsType> =
@@ -23,7 +23,7 @@ const Modal: React.FC<ModalPropsType> =
   const [outletName] = useState(outlet);
 
   useEffect(() => {
-    console.log('addingModal');
+    // console.log('addingModal');
     context.addModal({uuid: id, children, outlet});
 
     return () => context.removeModal(id);
@@ -59,7 +59,8 @@ const Outlet : React.FC<OutletPropsType> = ({name = 'root', config = {}}) => {
       const subsciption = context.visibility$.pipe(
         filter(value => value.outlet === name),
         scan((acc, value) => ({...acc, [value.uuid]: value.isVisible}), {}),
-        map(value => Object.values(value).every(value1 => value1)),
+        tap(console.log),
+        map(value => Object.values(value).some(value1 => value1)),
         distinctUntilChanged(),
       ).subscribe(value => setVisible(value));
       setRender(

@@ -2,16 +2,28 @@ import {ReplaySubject} from "rxjs";
 import {
   Dispatch,
   ReactNode,
-  SetStateAction
+  SetStateAction,
 } from "react";
 import {VisibilityEvent} from "./publicContext";
 
 
 export class InternalContext {
-  private dataBase: DataBaseType = {};
   private isRunning = false;
-  public identyfiyModal$ = new ReplaySubject<{uuid: string, outlet: string}>();
+  private dataBase: DataBaseType = {};
+  /** There is no other way. I need to store internally state of modals to make decisions based on that. */
+  public state: StateType = [];
   public visibility$ = new ReplaySubject<VisibilityEvent>();
+
+  constructor() {
+    /** Keep track of visibility state */
+    this.visibility$
+      .subscribe(({uuid, isVisible, outlet}) => {
+        this.state = [
+          ...this.state.filter(value => value[0] !== uuid),
+          [uuid, {isVisible, outlet}],
+        ];
+      })
+  }
 
   addOutlet(outlet: OutletType) {
     const {name, setState} = outlet;
@@ -20,7 +32,7 @@ export class InternalContext {
 
   addModal(modalData: ModalType) {
     const {outlet, uuid, children} = modalData;
-    this.identyfiyModal$.next({uuid, outlet});
+    this.state = [...this.state, [uuid, {outlet, isVisible: false}]];
     this.dataBase[outlet] = {
       ...this.dataBase[outlet],
       content: {
@@ -38,6 +50,7 @@ export class InternalContext {
   }
 
   removeModal(uuid: string) {
+    this.state = [...this.state.filter(value => value[0] !== uuid)];
     this.dataBase =
       Object.fromEntries(
         Object.entries(this.dataBase).map(([name, {content, setState}]) =>
@@ -55,16 +68,20 @@ export class InternalContext {
       )
   }
 
-  getModalOutlet(uuid: string) {
-    // ?
+  hideLastModal() {
+    const filteredState = this.state.filter(([uuid, {outlet, isVisible}]) => isVisible);
+
+    if (!!filteredState.length) {
+      const [uuid, {outlet}]= filteredState[filteredState.length - 1];
+      this.visibility$.next({uuid, outlet, isVisible: false})
+    }
   }
 
   private run() {
     /** @TODO im not sure about this ¯\_(ツ)_/¯ */
     document.addEventListener('keyup', ev => {
       if (ev.code === 'Escape') {
-        console.log('eskejp działa, lecimy dalej z tematem')
-        // this.closeLastModal();
+        this.hideLastModal();
       }
     });
   }
@@ -98,3 +115,5 @@ interface DataBaseType {
     }
   };
 }
+
+type StateType = [string, {isVisible: boolean, outlet: string}][];
